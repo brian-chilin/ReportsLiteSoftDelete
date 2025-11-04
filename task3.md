@@ -8,8 +8,8 @@ The rest of this document describes all the activities after `identifying the so
 ## Development Environment
 ### dev container
 - I queried ChatGPT   
-![caption](devcontainer1.png)
-![altext](devcontainer2.png)
+![devcontainer query](devcontainer1.png)
+![devcontainer query response](devcontainer2.png)
 - Upon visiting https://hub.docker.com/_/eclipse-temurin I found the correct label to extend from.
 - `remoteUser` was causing issues so I queried ChatGPT and followed their recommendation to use `root` rather than `vscode`. The container ran but this is poor practice. Since I had root access in the container a simple execution of `ls -la` showed some files owned by a user `ubuntu` who I plugged into the field.  
 
@@ -183,7 +183,8 @@ brian@pe710a:~/ReportsLiteSoftDelete$ cp Sqrilizz-Reports-Lite/build/libs/Sqrili
 - A final test from the original author's `🚀 Quick Start` from https://github.com/Sqrilizz/Sqrilizz-Reports/blob/82d33dcbe546397062ae03aed4fb895aae2b2e9c/README.md suggests everything is working:
 ```
 /report hAm_briAn Advertised software products in chat
-
 -> You cannot report yourself!
+/report mai Advertised software products in chat
+-> Report submitted successfully
 ```
-![Success](first_build_success.png)
+![test](first_build_success.png)
