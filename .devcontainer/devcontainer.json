@@ -1,0 +1,19 @@
+{
+  "name": "Java 21 + Gradle Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--init"
+  ],
+  "forwardPorts": [25565],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "richardwillis.vscode-gradle"
+      ]
+    }
+  },
+  "remoteUser": "ubuntu"
+}
