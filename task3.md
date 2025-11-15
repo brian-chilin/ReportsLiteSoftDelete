@@ -1,6 +1,15 @@
 # Determine the type of maintenance.
+Perfective. Business requirements changed. 
 
 # Describe what maintenance-related activities you performed/did not perform (like testing/ regression testing). Describe the reason why an activity was not performed.  
+- Update Documentation
+  - Not Performed - lazy. 
+- Regression Testing
+  - Not performed - original test suite not accessed
+- Backwards Compatibility Tests
+  - Not performed - known to break
+- Testing
+  - Performed a handful of test cases
 
 # Describe the challenges you faced while maintaining the program. 
 The rest of this document describes all the activities after `identifying the software and goals` 
@@ -205,5 +214,3 @@ brian@pe710a:~/ReportsLiteSoftDelete$ cp Sqrilizz-Reports-Lite/build/libs/Sqrili
   - Empty the old folder of files the server generated
   - Copy over the fresh jar
   - Start the server
-
-
