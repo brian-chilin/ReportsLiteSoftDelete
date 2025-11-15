@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import dev.sqrilizz.reports.ReportManager.ReportDetails;
+
 /**
  * Simple SQLite database manager
  */
@@ -33,7 +35,7 @@ public class DatabaseManager {
     }
     
     private void createTable() throws SQLException {
-        String sql = """
+        String sql_reports = """
             CREATE TABLE IF NOT EXISTS reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp BIGINT NOT NULL,
@@ -41,15 +43,24 @@ public class DatabaseManager {
                 reporter_uuid TEXT NOT NULL,
                 target_name TEXT NOT NULL,
                 reason TEXT NOT NULL,
-                location TEXT NOT NULL,
-                resolved BOOLEAN DEFAULT FALSE,
+                location TEXT NOT NULL
+            )
+        """;
+
+        String sql_reports_details = """
+            CREATE TABLE IF NOT EXISTS report_details (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id INTEGER NOT NULL,
+                timestamp BIGINT NOT NULL,  
                 resolver TEXT,
-                resolved_at BIGINT
+                deleter TEXT,
+                FOREIGN KEY(report_id) REFERENCES repors(id)
             )
         """;
         
         try (Statement stmt = connection.createStatement()) {
-            stmt.execute(sql);
+            stmt.execute(sql_reports);
+            stmt.execute(sql_reports_details);
         }
     }
     
@@ -57,12 +68,13 @@ public class DatabaseManager {
      * Save a new report
      */
     public long saveReport(ReportManager.Report report) {
-        String sql = """
+        String sql_report = """
             INSERT INTO reports (timestamp, reporter_name, reporter_uuid, target_name, reason, location)
             VALUES (?, ?, ?, ?, ?, ?)
         """;
+
         
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = connection.prepareStatement(sql_report, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setLong(1, report.getTimestamp());
             stmt.setString(2, report.getReporterName());
             stmt.setString(3, report.getReporterUuid().toString());
@@ -89,18 +101,29 @@ public class DatabaseManager {
     /**
      * Get reports for a player
      */
-    public List<ReportManager.Report> getReports(String targetName) {
+    public List<ReportManager.Report> getReports(String targetName, boolean get_deleted) {
         List<ReportManager.Report> reports = new ArrayList<>();
         
-        String sql = "SELECT * FROM reports WHERE target_name = ? ORDER BY timestamp DESC LIMIT 50";
-        
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setString(1, targetName);
-            
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    ReportManager.Report report = createReportFromResultSet(rs);
-                    reports.add(report);
+        String reports_sql = "SELECT * FROM reports WHERE target_name = ? ORDER BY timestamp DESC LIMIT 50";
+        String details_sql = "SELECT * FROM report_details WHERE report_id = ? ORDER BY timestamp DESC LIMIT 50";
+
+        try (PreparedStatement reports_stmt = connection.prepareStatement(reports_sql)) {
+            reports_stmt.setString(1, targetName);
+            try (ResultSet reports_set = reports_stmt.executeQuery()) {
+                while (reports_set.next()) {
+                    List<ReportDetails> details = new ArrayList<>();
+                    try (PreparedStatement details_stmt = connection.prepareStatement(details_sql)) {
+                        long id = reports_set.getLong("id");
+                        details_stmt.setLong(1, id);
+                        try (ResultSet details_set = details_stmt.executeQuery()) {
+                            while(details_set.next()) {
+                                details.add(createDetailsFromResultSet(details_set));
+                            }
+                        }
+                    }
+                    ReportManager.Report report = createReportFromResultSet(reports_set);
+                    report.setDetails(details);
+                    if (!report.isDeleted() || get_deleted) reports.add(report);
                 }
             }
             
@@ -115,15 +138,31 @@ public class DatabaseManager {
      * Resolve a report
      */
     public boolean resolveReport(long reportId, String resolver) {
-        String sql = "UPDATE reports SET resolved = TRUE, resolver = ?, resolved_at = ? WHERE id = ?";
-        
+        String check_deleted_sql = """
+            SELECT * FROM report_details WHERE report_id = ? ORDER BY timestamp DESC LIMIT 1
+        """;
+        try (PreparedStatement stmt = connection.prepareStatement(check_deleted_sql)) {
+            stmt.setLong(1, reportId);
+            try(ResultSet last_details = stmt.executeQuery()) {
+                if (last_details.next() && last_details.getString("deleter")!=null) return false; // dont resolve deleted reports
+            }
+        } catch (SQLException e) {
+            //"Failed to resolve report " + reportId;
+            return false;
+        }
+
+        //String sql = "UPDATE reports SET resolved = TRUE, resolver = ?, resolved_at = ? WHERE id = ?";
+        String sql = """
+            INSERT INTO report_details (report_id, timestamp, resolver, deleter)
+            VALUES (?, ?, ?, ?)
+        """;
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setString(1, resolver);
+            stmt.setLong(1, reportId);
             stmt.setLong(2, System.currentTimeMillis());
-            stmt.setLong(3, reportId);
-            
+            stmt.setString(3, resolver);
+            stmt.setString(4, null); // TODO FIX
+
             return stmt.executeUpdate() > 0;
-            
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to resolve report: " + e.getMessage());
             return false;
@@ -133,19 +172,48 @@ public class DatabaseManager {
     /**
      * Delete a report
      */
-    public boolean deleteReport(long reportId) {
-        String sql = "DELETE FROM reports WHERE id = ?";
-        
+    public boolean deleteReport(long reportId, String deleter) {
+        //String sql = "DELETE FROM reports WHERE id = ?";
+        // String sql = """
+        //     INSERT INTO report_details (report_id, timestamp, resolver, deleter)
+        //     VALUES (?, ?, ?, ?)
+        // """;
+        String sql = """
+            INSERT INTO report_details (report_id, timestamp, resolver, deleter)
+            VALUES (
+                ?,
+                ?,
+                (
+                    SELECT resolver
+                    FROM report_details
+                    WHERE report_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                ),
+                ?
+            )
+        """;
+
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setLong(1, reportId);
+            stmt.setLong(2, System.currentTimeMillis());
+            stmt.setLong(3, reportId); //TODO FIX
+            stmt.setString(4, deleter);
             return stmt.executeUpdate() > 0;
-            
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to delete report: " + e.getMessage());
             return false;
         }
     }
     
+    /**
+     * Create ReportDetails object from ResultSet
+     */
+    private ReportManager.ReportDetails createDetailsFromResultSet(ResultSet rs) throws SQLException {
+        ReportManager.ReportDetails details = new ReportDetails(rs.getLong("report_id"), rs.getLong("timestamp"), rs.getString("resolver"), rs.getString("deleter"));
+        return details;
+    }
+
     /**
      * Create Report object from ResultSet
      */
@@ -163,8 +231,8 @@ public class DatabaseManager {
         );
         
         report.setId(rs.getLong("id"));
-        report.setResolved(rs.getBoolean("resolved"));
-        report.setResolver(rs.getString("resolver"));
+        //report.setResolved(rs.getBoolean("resolved"));
+        //report.setResolver(rs.getString("resolver"));
         
         return report;
     }

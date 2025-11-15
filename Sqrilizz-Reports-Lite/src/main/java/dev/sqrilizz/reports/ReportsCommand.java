@@ -8,7 +8,9 @@ import org.bukkit.command.CommandSender;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Simple /reports command for viewing and managing reports
@@ -54,15 +56,17 @@ public class ReportsCommand implements CommandExecutor {
      */
     private void handleView(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /reports view <player>");
+            sender.sendMessage(ChatColor.RED + "Usage: /reports view [-a] <player>");
             return;
         }
-        
-        String playerName = args[1];
+
+        List<String> list = new ArrayList<>(Arrays.asList(args));
+        boolean get_deleted = list.remove("-a");
+        String playerName = list.get(1);
         
         // Get reports asynchronously
         plugin.runAsync(() -> {
-            List<ReportManager.Report> reports = reportManager.getReports(playerName);
+            List<ReportManager.Report> reports = reportManager.getReports(playerName, get_deleted);
             
             // Send response on main thread
             plugin.getServer().getScheduler().runTask(plugin, () -> {
@@ -82,20 +86,31 @@ public class ReportsCommand implements CommandExecutor {
                         ChatColor.GREEN + "[RESOLVED]" : 
                         ChatColor.RED + "[OPEN]";
                     
-                    sender.sendMessage(String.format("%s #%d %s%s %s%s",
-                        status,
+                    sender.sendMessage(String.format("#%d %s%s %s: %s%s",
+                        //status,
                         report.getId(),
                         ChatColor.GRAY,
                         time,
+                        report.getReporterName(),
                         ChatColor.WHITE,
                         report.getReason()
                     ));
                     
-                    sender.sendMessage(ChatColor.GRAY + "  Reporter: " + ChatColor.WHITE + report.getReporterName());
-                    
-                    if (report.isResolved()) {
-                        sender.sendMessage(ChatColor.GRAY + "  Resolved by: " + ChatColor.WHITE + report.getResolver());
+                    for (ReportManager.ReportDetails details : report.getDetails()) {
+                        String detailTime = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
+                            .withZone(ZoneId.systemDefault())
+                            .format(Instant.ofEpochMilli(report.getTimestamp()));
+                        
+                        
+                        String message = "  " + detailTime.toString();
+                        if (details.getResolver() != null) {message += ChatColor.AQUA + " [RESOLVED:" + details.getResolver() + "]";}
+                        if (details.getDeleter() != null) {message += ChatColor.DARK_PURPLE + " [DELETED:" + details.getDeleter() + "]";}
+                        sender.sendMessage(message);
                     }
+                    //sender.sendMessage(ChatColor.GRAY + "  Reporter: " + ChatColor.WHITE + report.getReporterName());
+                    // if (report.isResolved()) {
+                    //     sender.sendMessage(ChatColor.GRAY + "  Resolved by: " + ChatColor.WHITE + report.getResolver());
+                    // }
                 }
                 
                 sender.sendMessage(ChatColor.GREEN + "=== End of reports ===");
@@ -154,7 +169,7 @@ public class ReportsCommand implements CommandExecutor {
         
         // Delete report asynchronously
         plugin.runAsync(() -> {
-            boolean success = reportManager.deleteReport(reportId);
+            boolean success = reportManager.deleteReport(reportId, sender.getName());
             
             // Send response on main thread
             plugin.getServer().getScheduler().runTask(plugin, () -> {

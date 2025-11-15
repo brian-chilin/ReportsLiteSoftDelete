@@ -11,12 +11,10 @@ public class ReportManager {
     
     private final Main plugin;
     private final DatabaseManager database;
-    private final CacheManager cache;
     
     public ReportManager(Main plugin) {
         this.plugin = plugin;
         this.database = plugin.getDatabaseManager();
-        this.cache = plugin.getCache();
     }
     
     /**
@@ -40,9 +38,6 @@ public class ReportManager {
             
             report.setId(reportId);
             
-            // Update cache
-            cache.addReport(targetName, report);
-            
             // Send notifications asynchronously
             plugin.runAsync(() -> sendNotifications(report));
             
@@ -57,14 +52,9 @@ public class ReportManager {
     /**
      * Get reports for a player
      */
-    public List<Report> getReports(String playerName) {
-        // Try cache first
-        List<Report> cached = cache.getReports(playerName);
-        if (cached != null) return cached;
-        
+    public List<Report> getReports(String playerName, boolean get_deleted) {
         // Load from database
-        List<Report> reports = database.getReports(playerName);
-        cache.cacheReports(playerName, reports);
+        List<Report> reports = database.getReports(playerName, get_deleted);
         
         return reports;
     }
@@ -77,9 +67,6 @@ public class ReportManager {
             // Update database
             if (!database.resolveReport(reportId, resolver)) return false;
             
-            // Clear cache
-            cache.invalidateAll();
-            
             return true;
             
         } catch (Exception e) {
@@ -91,13 +78,10 @@ public class ReportManager {
     /**
      * Delete a report
      */
-    public boolean deleteReport(long reportId) {
+    public boolean deleteReport(long reportId, String deleter) {
         try {
             // Delete from database
-            if (!database.deleteReport(reportId)) return false;
-            
-            // Clear cache
-            cache.invalidateAll();
+            if (!database.deleteReport(reportId, deleter)) return false;
             
             return true;
             
@@ -128,6 +112,26 @@ public class ReportManager {
     }
     
     /**
+     * Report Details Class
+     */
+    public static class ReportDetails {
+        private long id;
+        private final long reportId;
+        private final long timestamp;
+        private final String resolver;
+        private final String deleter;
+
+        public ReportDetails(long reportId, long timestamp, String resolver, String deleter) {
+            this.reportId = reportId;
+            this.timestamp = timestamp;
+            this.resolver = resolver;
+            this.deleter = deleter;
+        }
+        public String getResolver() {return this.resolver;}
+        public String getDeleter() {return this.deleter;}
+    }
+
+    /**
      * Simple Report class
      */
     public static class Report {
@@ -138,8 +142,9 @@ public class ReportManager {
         private final String targetName;
         private final String reason;
         private final String location;
-        private boolean resolved;
-        private String resolver;
+        //private boolean resolved;
+        //private String resolver;
+        private List<ReportDetails> details;
         
         public Report(long timestamp, String reporterName, UUID reporterUuid, 
                      String targetName, String reason, org.bukkit.Location loc) {
@@ -149,7 +154,7 @@ public class ReportManager {
             this.targetName = targetName;
             this.reason = reason;
             this.location = String.format("%.1f, %.1f, %.1f", loc.getX(), loc.getY(), loc.getZ());
-            this.resolved = false;
+            //this.resolved = false;
         }
         
         // Getters and setters
@@ -161,9 +166,21 @@ public class ReportManager {
         public String getTargetName() { return targetName; }
         public String getReason() { return reason; }
         public String getLocation() { return location; }
-        public boolean isResolved() { return resolved; }
-        public void setResolved(boolean resolved) { this.resolved = resolved; }
-        public String getResolver() { return resolver; }
-        public void setResolver(String resolver) { this.resolver = resolver; }
+        public boolean isResolved() {
+            return getResolver() != null;
+        }
+        //public void setResolved(boolean resolved) { this.resolved = resolved; }
+        public String getResolver() {
+            return details.isEmpty() ? null : details.get(0).resolver;
+        }
+        //public void setResolver(String resolver) { this.resolver = resolver; }
+        public List<ReportDetails> getDetails() { return details; }
+        public void setDetails(List<ReportDetails> details) { this.details = details; }
+        public boolean isDeleted() {
+            return getDeleter() != null;
+        }
+        public String getDeleter() {
+            return details.isEmpty() ? null : details.get(0).deleter;
+        }
     }
 }

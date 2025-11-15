@@ -3,9 +3,10 @@
 # Describe what maintenance-related activities you performed/did not perform (like testing/ regression testing). Describe the reason why an activity was not performed.  
 
 # Describe the challenges you faced while maintaining the program. 
-The rest of this document describes all the activities after `identifying the software and goals` to just before `the first alteration.` 
+The rest of this document describes all the activities after `identifying the software and goals` 
 
-## Development Environment
+## Setting Up Development Environment
+This section covers building the plugin so I can produce a vanilla copy as the author distributes while having supporting tooling so I can make changes later. 
 ### dev container
 - I queried ChatGPT   
 ![devcontainer query](devcontainer1.png)
@@ -188,3 +189,21 @@ brian@pe710a:~/ReportsLiteSoftDelete$ cp Sqrilizz-Reports-Lite/build/libs/Sqrili
 -> Report submitted successfully
 ```
 ![test](first_build_success.png)
+
+## Preparing to make first changes
+### Program Comprehension 
+- `Sqrilizz-Reports-Lite/src/main/java/dev/sqrilizz/reports`
+- I chose a bottom up code reading strategy because I knew I was looking for some report stuff and was guessing `Main.java` would be clouded with things I wouldn't know about.
+  - I quickly navigated to DatabaseManager who doesn't construct any object this repo defines ~ it's sort of atomic how it doesn't aggregate classes I'm unfamiliar with.
+  - A DatabaseManager is owned by a ReportManager who also owns a CacheManager. 
+  - A ReportManager is owned by a ReportsCommand who is owned by Main, which is the point of entry from the plugin system extending `org.bukkit.plugin.java.JavaPlugin`. This class also defines the class Report, which is imperative. 
+- https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentHashMap.html was useful, I wasn't familiar with some function names as Java isn't a language I use often and I'm not too familiar with that class ConcurrentHashMap
+### Build Script
+- Combine a few commands I would often run serially while iteratively developing:
+- iterate.sh
+  - Build the jar
+  - Empty the old folder of files the server generated
+  - Copy over the fresh jar
+  - Start the server
+
+
