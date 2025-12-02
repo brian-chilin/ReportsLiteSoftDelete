@@ -54,7 +54,7 @@ public class DatabaseManager {
                 timestamp BIGINT NOT NULL,  
                 resolver TEXT,
                 deleter TEXT,
-                FOREIGN KEY(report_id) REFERENCES repors(id)
+                FOREIGN KEY(report_id) REFERENCES reports(id)
             )
         """;
         
